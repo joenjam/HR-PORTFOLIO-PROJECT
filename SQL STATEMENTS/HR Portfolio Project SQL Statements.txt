@@ -1,0 +1,169 @@
+ --Renaming  column id to emp_id
+  
+EXEC sp_rename '[Human Resources ].id',
+'emp_id';
+
+
+
+--Removing timestamp from termdate column and converting it to date datatype.
+SELECT CONVERT(date,PARSENAME(REPLACE(termdate,' ','.'),3))
+FROM [Human Resources Portfolio Project].[dbo].[Human Resources ]
+
+UPDATE [Human Resources ]
+SET termdate=CONVERT(date,PARSENAME(REPLACE(termdate,' ','.'),3))
+
+SELECT * FROM [Human Resources ]
+
+ALTER TABLE [Human Resources ]
+ALTER COLUMN termdate date
+
+--Adding and populating Age column 
+ALTER TABLE [Human Resources ]
+ADD Age INT
+
+SELECT DATEDIFF(YEAR,birthdate,GETDATE()) Age
+FROM [Human Resources ]
+
+UPDATE [Human Resources ]
+SET Age=DATEDIFF(YEAR,birthdate,GETDATE())
+
+--Employee Age range
+SELECT MIN(Age) min,MAX(Age) max
+FROM [Human Resources ]
+
+--What is the gender breakdown of employees in the company?
+SELECT gender,COUNT(*) emp_gender_count
+FROM [Human Resources ]
+WHERE ISNULL(CAST(termdate AS  nvarchar(12)),'0') ='0'
+GROUP BY gender
+ORDER BY emp_gender_count DESC
+
+--What is the race/ethnicity breakdown of employees in the company?
+SELECT race, COUNT(*) emp_race_count
+FROM [Human Resources ]
+WHERE ISNULL(CAST(termdate AS  nvarchar(12)),'0') ='0'
+GROUP BY race
+ORDER BY COUNT(*) DESC
+
+--What is the age distribution of employees in the company?
+SELECT 
+CASE
+	 WHEN Age>=21 AND Age<=28 THEN '21-28'
+	 WHEN Age>=29 AND Age<=36 THEN '29-36'
+	 WHEN Age>=37 AND Age<=42 THEN '37-42'
+	 WHEN Age>=43 AND Age<=50 THEN '43-50'
+	 ELSE '51+'
+END Age_group, 
+	 COUNT(*) Age_count
+FROM [Human Resources ]
+WHERE ISNULL(CAST(termdate AS  nvarchar(12)),'0') ='0'
+GROUP BY CASE
+	 WHEN Age>=21 AND Age<=28 THEN '21-28'
+	 WHEN Age>=29 AND Age<=36 THEN '29-36'
+	 WHEN Age>=37 AND Age<=42 THEN '37-42'
+	 WHEN Age>=43 AND Age<=50 THEN '43-50'
+	 ELSE '51+'
+END
+ORDER BY Age_group
+
+
+--What is the gender distribution among the Age groups employees in the company?
+
+SELECT 
+CASE
+	 WHEN Age>=21 AND Age<=28 THEN '21-28'
+	 WHEN Age>=29 AND Age<=36 THEN '29-36'
+	 WHEN Age>=37 AND Age<=42 THEN '37-42'
+	 WHEN Age>=43 AND Age<=50 THEN '43-50'
+	 ELSE '51+'
+END Age_group, gender,
+	 COUNT(*) Age_count
+FROM [Human Resources ]
+WHERE ISNULL(CAST(termdate AS nvarchar(12)),'0') ='0'
+GROUP BY CASE
+	 WHEN Age>=21 AND Age<=28 THEN '21-28'
+	 WHEN Age>=29 AND Age<=36 THEN '29-36'
+	 WHEN Age>=37 AND Age<=42 THEN '37-42'
+	 WHEN Age>=43 AND Age<=50 THEN '43-50'
+	 ELSE '51+'
+END,gender
+ORDER BY Age_group
+
+--How many employees work at Headquarters versus Remote locations
+SELECT location,COUNT(*) emp_location_count
+FROM [Human Resources ]
+WHERE ISNULL(CAST(termdate AS  nvarchar(12)),'0') ='0'
+GROUP BY location
+
+--Average length of employment for employees who have been terminated.
+SELECT CAST(AVG(DATEDIFF(YEAR,hire_date,termdate)) AS decimal(10,0)) avg_len_of_emp_b4_term
+FROM [Human Resources ]
+WHERE termdate<=GETDATE() AND ISNULL(termdate,'0') <>'0'
+
+--How does the gender distribution vary across departments and job titles
+SELECT department,gender,COUNT(*) gender_dist_by_dept_jobtitle
+FROM [Human Resources ]
+WHERE ISNULL(termdate,'0') ='0'
+GROUP BY department,gender
+ORDER BY department
+
+--What is the distribution of jobtitle across the departments.
+SELECT jobtitle, COUNT(*) Count
+FROM [Human Resources ]
+WHERE ISNULL(termdate,'0') ='0'
+GROUP BY jobtitle
+ORDER BY jobtitle DESC
+
+--The department with the highest turn over rate.
+WITH TOTAL_COUNT(department,terminated_count,total_cnt) AS
+	(SELECT hr.department, 
+	SUM(CASE WHEN (ISNULL(CAST(termdate AS nvarchar),'0') <>'0'  AND termdate<=GETDATE()) 
+	THEN 1 ELSE 0 END) terminated_count,COUNT(*) total_cnt
+	FROM [Human Resources ] hr
+	GROUP BY department)
+
+	SELECT department,terminated_count,total_cnt,CAST(CAST(terminated_count AS decimal(10,2))/CAST(total_cnt AS decimal(10,2)) AS decimal(10,2))
+	turnover_rate
+	FROM TOTAL_COUNT a
+	ORDER BY turnover_rate DESC
+
+	 
+
+	
+
+--What is the distribution of employees across location by location_states.
+SELECT  location_state, COUNT(*) emp_count
+FROM [Human Resources ]
+WHERE ISNULL(CAST(termdate AS nvarchar(12)),'0')='0'
+GROUP BY location_state
+ORDER BY emp_count DESC
+
+--What is the distribution of employees across location by location_city.
+SELECT  location_city, COUNT(*) emp_count
+FROM [Human Resources ]
+WHERE ISNULL(CAST(termdate AS nvarchar(12)),'0')='0'
+GROUP BY location_city
+ORDER BY emp_count DESC
+
+--How is the company employee count changed over time based on hire_date and termdate
+WITH Hire_VS_Term(year,hires,terms) AS (SELECT
+	 YEAR(a.hire_date) year, COUNT(*) hires,
+	 SUM(CASE WHEN ISNULL(CAST(termdate AS nvarchar(12)),'0')<> '0' AND termdate <= GETDATE() 
+	 THEN  1 ELSE 0 END) terms
+	FROM [Human Resources ] a
+	GROUP BY YEAR(a.hire_date) ) 
+
+	SELECT year,b.hires,b.terms,b.hires-b.terms net_change,CAST((CAST((b.hires-b.terms)*100 AS decimal(10,2))/CAST(b.hires AS decimal(10,2))) AS decimal(10,2)) 'net_change_%'
+	FROM Hire_VS_Term b
+	ORDER BY year
+
+	--What is the tenure distribution for each department.
+	ALTER TABLE [Human Resources ]
+	ALTER COLUMN termdate date
+	
+
+	SELECT department,AVG(DATEDIFF(YEAR,hire_date,termdate)) avg_tenure_of_emp
+	FROM [Human Resources ]
+	WHERE ISNULL(CAST(termdate AS nvarchar(12)),'0')<>'0' AND ISNULL(CAST(termdate AS nvarchar(12)),'0') <=GETDATE()
+	GROUP BY department
+	ORDER BY avg_tenure_of_emp DESC
